@@ -1,9 +1,10 @@
 import fastify from "fastify";
+import { transactionsRoutes } from "./routes/transactions";
 
 const app = fastify();
 
-app.get("/hello", () => {
-  return "hellor asdworld!";
+app.register(transactionsRoutes, {
+  prefix: "transactions",
 });
 
 app.listen({ port: 3333 }).then(() => {
