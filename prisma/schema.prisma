@@ -15,4 +15,5 @@ model Transaction {
   title      String
   amount     Decimal
   created_at DateTime @default(now())
+  session_id String   @default(uuid())
 }

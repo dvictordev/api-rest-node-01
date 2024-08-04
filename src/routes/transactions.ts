@@ -1,13 +1,26 @@
 import { PrismaClient } from "@prisma/client";
+import { randomUUID } from "crypto";
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 const prisma = new PrismaClient();
 
 export async function transactionsRoutes(app: FastifyInstance) {
   app.get("/", async (request, reply) => {
-    const transactions = await prisma.transaction.findMany();
+    const sessionId = request.cookies.sessionId;
 
-    return reply.status(200).send({ total: 200, transactions });
+    if (!sessionId) {
+      return reply.status(401).send({
+        error: "Unauthorized",
+      });
+    }
+
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        session_id: sessionId,
+      },
+    });
+
+    return reply.status(200).send({ transactions });
   });
 
   app.get("/:id", async (request, reply) => {
@@ -47,13 +60,24 @@ export async function transactionsRoutes(app: FastifyInstance) {
       request.body
     );
 
+    let sessionId = request.cookies.sessionId;
+
+    if (!sessionId) {
+      sessionId = randomUUID();
+
+      reply.cookie("sessionId", sessionId, {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7, //7 days
+      });
+    }
     const transaction = await prisma.transaction.create({
       data: {
         title,
         amount: type === "credit" ? amount : amount * -1,
+        session_id: sessionId,
       },
     });
 
-    return reply.status(201).send();
+    return reply.status(201).send(transaction);
   });
 }
