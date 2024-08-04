@@ -2,52 +2,73 @@ import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { checkSessionIdExist } from "../middlewares/check_session_id_exist";
 const prisma = new PrismaClient();
 
 export async function transactionsRoutes(app: FastifyInstance) {
-  app.get("/", async (request, reply) => {
-    const sessionId = request.cookies.sessionId;
+  app.get(
+    "/",
+    {
+      preHandler: [checkSessionIdExist],
+    },
+    async (request, reply) => {
+      const { sessionId } = request.cookies;
 
-    if (!sessionId) {
-      return reply.status(401).send({
-        error: "Unauthorized",
+      const transactions = await prisma.transaction.findMany({
+        where: {
+          session_id: sessionId,
+        },
       });
+
+      return reply.status(200).send({ transactions });
     }
+  );
 
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        session_id: sessionId,
-      },
-    });
+  app.get(
+    "/:id",
+    {
+      preHandler: [checkSessionIdExist],
+    },
+    async (request, reply) => {
+      const { sessionId } = request.cookies;
 
-    return reply.status(200).send({ transactions });
-  });
+      const getTransactionParamSchema = z.object({
+        id: z.string(),
+      });
 
-  app.get("/:id", async (request, reply) => {
-    const getTransactionParamSchema = z.object({
-      id: z.string(),
-    });
+      const id = Number(getTransactionParamSchema.parse(request.params).id);
 
-    const { id } = getTransactionParamSchema.parse(request.params);
+      const transaction = await prisma.transaction.findUnique({
+        where: {
+          id,
+          session_id: sessionId,
+        },
+      });
 
-    const transaction = await prisma.transaction.findUnique({
-      where: {
-        id: Number(id),
-      },
-    });
+      return reply.status(200).send({ transaction });
+    }
+  );
 
-    return reply.status(200).send({ transaction });
-  });
+  app.get(
+    "/summary",
+    {
+      preHandler: [checkSessionIdExist],
+    },
+    async (request, reply) => {
+      const { sessionId } = request.cookies;
 
-  app.get("/summary", async (request, reply) => {
-    const transaction = await prisma.transaction.aggregate({
-      _sum: {
-        amount: true,
-      },
-    });
+      const transaction = await prisma.transaction.aggregate({
+        _sum: {
+          amount: true,
+        },
+        where: {
+          session_id: sessionId,
+        },
+      });
 
-    return reply.status(200).send({ summary: transaction._sum });
-  });
+      return reply.status(200).send({ summary: transaction._sum });
+    }
+  );
 
   app.post("/", async (request, reply) => {
     const createTransactionBodySchema = z.object({
